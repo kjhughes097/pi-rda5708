@@ -17,6 +17,7 @@ This app goes a little further. In addition to setting the frequency, volume and
 
 A makefile is included, so compiling the app is a simple case of `make radio`
 Running the app with no command line parameters will provide usage information and examples of how to use it.
+
 *Note* This app using the wiringPi library, so needs to be run with sudo (e.g. `sudo ./radio -f 1029 -v 10`
 
 
