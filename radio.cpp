@@ -9,7 +9,6 @@
 #include <unistd.h>//Needed for I2C port
 #include "rda5702e.h"
 #include <wiringPi.h>
-#include "ssd1306.h"
 
 #define SWITCH_DELAY 5000
 #define SHUTDOWN_DELAY 20
@@ -22,15 +21,15 @@ int channelFreqs[PRESET_COUNT] =         { 970,                1029,            
 
 
 void setupButtons();
-void setupDisplay(SSD1306*);
-void setupAnalogVolume();
-int getAnalogVolume();
 bool isUpPressed();
 bool isDownPressed();
 bool isStandByPressed();
 void channelUp(RDA5702E*);
 void channelDown(RDA5702E*);
 void startShutdown();
+void printUsage();
+void printPresets();
+void printButtons();
 
 const int RADIO_ADDR = 0x10;
 bool debug = false;
@@ -39,7 +38,7 @@ int channelIndex = 0;
 
 int main(int argc, char* argv[]) {
 
-    int freq = 1029; // default to heart.co.uk
+    int freq = -1;
     int vol = 10;
 
     for(int i=1; i<argc; i++) {
@@ -62,60 +61,48 @@ int main(int argc, char* argv[]) {
             } else {
                 printf("Preset is invalid, it should be between 1 and %i\n", PRESET_COUNT);
             }
-        }   
+        } else if(strncmp(argv[i], "-l", 100) == 0) {
+            printPresets();
+            return 0;
+        } else if(strncmp(argv[i], "-b", 100) == 0) {
+            printButtons();
+            return 0;
+        }  
+    }
+
+    if(freq == -1) {
+        printUsage();
+        return 0;
     }
 
     // set up wiringPi
     wiringPiSetupGpio();
-
     // start and setup the radio with defaults
     RDA5702E radio;
     radio.debug = debug;
     radio.init();
     radio.setFreq(freq);
     radio.setVolume(vol);
-
-    // set up the buttons and volume ADC
+ 
+    // set up the buttons 
     setupButtons();
-    setupAnalogVolume();
-    
-    // set up the OLED display
-    SSD1306 oled;
-    setupDisplay(&oled);
-
 
     // main loop - do forever
     while(true) {
 
-        bool isDirty = false;
-
         if(isUpPressed()) {
             channelUp(&radio);
             delay(SWITCH_DELAY); // so we debounce
-            isDirty = true; // so we update the display later
         }
         if(isDownPressed()) {
             channelDown(&radio);
             delay(SWITCH_DELAY);
-            isDirty = true;
         }
         if(isStandByPressed()){
             startShutdown();
         }
 
-        int vol = getAnalogVolume();
-        if(vol != radio.getVolume()) {
-            //radio.setVolume(vol);
-            isDirty = true;
-        }
-
-
-        if(isDirty) {
-            // update the OLED display
-        }
-
         delay(100);
-
     }
 
 }
@@ -134,18 +121,6 @@ void setupButtons() {
     pullUpDnControl(BTN_DN, PUD_UP);
     pullUpDnControl(BTN_SB, PUD_UP);
     pullUpDnControl(BTN_PW, PUD_UP);
-}
-
-void setupAnalogVolume() {
-    // set up the PCF8571 ADC to monitor the volume pot.
-}
-
-void setupDisplay(SSD1306 *pOLED) {
-    // set up the 128x64 OLED I2C display
-	pOLED->initDisplay();
-    pOLED->setWordWrap(FALSE);
-    pOLED->setDisplayMode(SSD1306::Mode::WRAP);
-    pOLED->textDisplay("UP  DN  STBY  PWR");   // top line showing button functions 
 }
 
 void startShutdown() {
@@ -198,4 +173,32 @@ bool isUpPressed() {
 bool isStandByPressed() {
     // read the up button
     return (digitalRead(BTN_SB) == 0);
+}
+
+void printUsage() {
+    printf("Usage:  radio -f 870..1080 | -p 1..n [-v 0..15]\n");
+    printf("\t -f : set the desired frequency (in Mhz * 10, e.g. 102.3Mhz = 1023)\n");
+    printf("\t -p : select the desired preset (1..n where n is the number of presets defined)\n\n");
+    printf("Examples :\n");
+    printf("\t radio -f 1028\n\t Sets frequency to 102.8Mhz and volume to default (10)\n\n");
+    printf("\t radio -f 1028 -v 5\n\t Sets frequency to 102.8Mhz and volume to 5\n\n");
+    printf("\t radio -p 1\n\t Sets frequency to the first preset and volume to default (10)\n\n");
+    printf("\t radio -p 1 -v 8\n\t Sets frequency to first preset and volume to default (10)\n\n");
+    printf("\t radio -l\n\t Lists the frequencies and names of the presets\n\n");
+    printf("\t radio -b\n\t Lists the buttons and their associated GPIO pin number\n\n");
+}
+
+void printPresets() {
+    printf("Preset List :\n");
+    for(int i=0;i<PRESET_COUNT;i++) {
+        printf("\tPreset %i - %i : %s \n", i+1,channelFreqs[i], channelNames[i]);
+    }
+}
+
+void printButtons() {
+    printf("Button List :\n");
+    printf("\tGPIO pin %i = UP\n", BTN_UP);
+    printf("\tGPIO pin %i = DOWN\n", BTN_DN);
+    printf("\tGPIO pin %i = STANDBY\n", BTN_SB);
+    printf("\tGPIO pin %i = POWER (not used at this time)\n", BTN_PW);
 }
